@@ -1,0 +1,46 @@
+# set up
+# upgrade pyspark
+pip install --upgrade pyspark
+# install
+pyspark --packages io.delta:delta-core_2.12:0.1.0
+
+
+# write table
+df= spark.read.csv("/databricks-datasets/Rdatasets/data-001/csv/ggplot2/diamonds.csv", header="true", inferSchema="true")
+df.write.format("delta").save("/delta/diamonds")
+# append
+df.write.format("delta").mode("append").save("/delta/events")
+# we can also partition the table
+df.write.format("delta").partitionBy("date").save("/delta/events")
+# update
+data.write.format("delta").mode("overwrite").option("replaceWhere", "date >= '2017-01-01' AND date <= '2017-01-31'").save("/tmp/delta-table")
+# by default overwrite doesn't change schema, only if option("overwriteSchema", "true") exiting
+# add column automatically
+df.write.format("delta").mode("append").option("mergeSchema", "true").save("/delta/events")
+
+
+# read
+df = spark.read.format("delta").load("/tmp/delta-table")
+SELECT * FROM delta.`/tmp/delta-table`
+
+# time travel
+# create a read version 
+df1 = spark.read.format("delta").option("timestampAsOf", timestamp_string).load("/delta/events") 
+# For timestamp_string, only date or timestamp strings are accepted
+df2 = spark.read.format("delta").option("versionAsOf", version).load("/delta/events")
+
+# structured stream
+streamingDf = spark.readStream.format("delta").load()
+stream = streamingDf.selectExpr("value as id").writeStream.format("delta").option("checkpointLocation", "/tmp/checkpoint").start("/tmp/delta-table")
+# set mini-batch
+spark.readStream.format("delta").option("maxFilesPerTrigger",1000).load()
+# ignore updates and deletes with "ignoreDeletes" and "ignoreChanges"
+# append mode and complete mode
+streamingDf = spark.writeStream.format("delta").outputMode("append").load() 
+streamingDf = spark.writeStream.format("delta").outputMode("complete").load()
+
+stream2 = spark.readStream.format("delta").load("/tmp/delta-table").writeStream.format("console").start()
+stream.stop()
+
+# check point
+.option("checkpointLocation", "/delta/eventsByCustomer/_checkpoints/streaming-agg")
